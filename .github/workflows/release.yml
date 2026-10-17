@@ -155,72 +155,56 @@ jobs:
           name: ${{ env.BINARY_NAME }}-macos-slice-${{ matrix.arch }}
           path: dist/*
 
-  build-macos-universal:
-    runs-on: macos-latest
-    needs: [build-macos-slices]
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+build-macos-universal:
+  runs-on: macos-latest
+  needs: [build-macos-slices]
+  steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Get ARM Slice
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # 8.0.1
-        with:
-          name: ${{ env.BINARY_NAME }}-macos-slice-arm
-          path: dist/slices
+    - name: Get ARM Slice
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # 8.0.1
+      with:
+        name: ${{ env.BINARY_NAME }}-macos-slice-arm
+        path: dist/slices
 
-      - name: Get Intel Slice
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # 8.0.1
-        with:
-          name: ${{ env.BINARY_NAME }}-macos-slice-intel
-          path: dist/slices
+    - name: Get Intel Slice
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # 8.0.1
+      with:
+        name: ${{ env.BINARY_NAME }}-macos-slice-intel
+        path: dist/slices
 
-      - name: Setup Certificates
-        uses: apple-actions/import-codesign-certs@5142e029c445c10ffc7149d172e540235a065466 # v7.0.0
-        with:
-          p12-file-base64: ${{ secrets.DEV_ID_P12_BASE64 }}
-          p12-password: ${{ secrets.DEV_ID_P12_PASSWORD }}
+    - name: Download CreateDMG
+      run: |
+        brew install create-dmg
 
-      - name: Download CreateDMG
-        run: |
-          brew install create-dmg
+    - name: Create Universal Binary
+      run: |
+        make macos BIN1=dist/slices/${{ env.BINARY_NAME }}-macos-arm64 BIN2=dist/slices/${{ env.BINARY_NAME }}-macos-x86_64 BUNDLE=1 ARCH=universal
+        make macos BIN1=dist/slices/${{ env.BINARY_NAME_CLI }}-macos-arm64 BIN2=dist/slices/${{ env.BINARY_NAME_CLI }}-macos-x86_64 ARCH=universal
 
-      - name: Create Universal Binary
-        run: |
-          make macos BIN1=dist/slices/${{ env.BINARY_NAME }}-macos-arm64 BIN2=dist/slices/${{ env.BINARY_NAME }}-macos-x86_64 BUNDLE=1 ARCH=universal
-          make macos BIN1=dist/slices/${{ env.BINARY_NAME_CLI }}-macos-arm64 BIN2=dist/slices/${{ env.BINARY_NAME_CLI }}-macos-x86_64 ARCH=universal
+    # 签名/导入证书/公证步骤已移除 — 生成的是未签名的 DMG
 
-      - name: Codesign
-        run: |
-          mkdir -p dist/dmg
-          mv dist/${{ env.BUNDLE_NAME }}.app dist/dmg/
-          codesign --deep --force --options runtime \
-            --sign "${{ secrets.DEV_ID_IDENTITY_NAME }}" dist/dmg/${{ env.BUNDLE_NAME }}.app
+    - name: Create DMG
+      run: |
+        mkdir -p dist/out
+        create-dmg \
+          --volname ${{ env.BUNDLE_NAME }} \
+          --background "package/macos/background.png" \
+          --window-pos 200 120 \
+          --window-size 510 350 \
+          --icon-size 100 \
+          --icon ${{ env.BUNDLE_NAME }}.app 160 155 \
+          --hide-extension "${{ env.BUNDLE_NAME }}.app" \
+          --app-drop-link 350 155 \
+          dist/${{ env.BUNDLE_NAME }}-macos-universal.dmg dist/dmg
 
-      - name: Create DMG
-        run: |
-          mkdir -p dist/out
-          create-dmg \
-            --volname ${{ env.BUNDLE_NAME }} \
-            --background "package/macos/background.png" \
-            --window-pos 200 120 \
-            --window-size 510 350 \
-            --icon-size 100 \
-            --icon ${{ env.BUNDLE_NAME }}.app 160 155 \
-            --hide-extension "${{ env.BUNDLE_NAME }}.app" \
-            --app-drop-link 350 155 \
-            dist/${{ env.BUNDLE_NAME }}-macos-universal.dmg dist/dmg
-
-      - name: Notarize DMG
-        run: |
-          xcrun notarytool submit dist/${{ env.BUNDLE_NAME }}-macos-universal.dmg --apple-id "${{ secrets.APPLE_ID_EMAIL }}" --password "${{ secrets.APPLE_ID_PASSWORD }}" --team-id "${{ secrets.APPLE_ID_TEAM }}" --wait
-          xcrun stapler staple dist/${{ env.BUNDLE_NAME }}-macos-universal.dmg
-
-      - name: Upload Universal DMG
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: ${{ env.BINARY_NAME }}-macos-universal
-          path: |
-            dist/${{ env.BUNDLE_NAME }}-macos-universal.dmg
-            dist/${{ env.BINARY_NAME_CLI }}-macos-universal
+    - name: Upload Universal DMG
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: ${{ env.BINARY_NAME }}-macos-universal
+        path: |
+          dist/${{ env.BUNDLE_NAME }}-macos-universal.dmg
+          dist/${{ env.BINARY_NAME_CLI }}-macos-universal
 
   release:
     runs-on: ubuntu-24.04
