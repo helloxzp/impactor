@@ -205,7 +205,6 @@ build-macos-universal:
         path: |
           dist/${{ env.BUNDLE_NAME }}-macos-universal.dmg
           dist/${{ env.BINARY_NAME_CLI }}-macos-universal
-
   release:
     runs-on: ubuntu-24.04
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
